@@ -1,0 +1,7 @@
+output/*
+!output/.gitkeep
+novel-configs/*
+!novel-configs/.gitkeep
+outputs/*
+!outputs/.gitkeep
+config.json
