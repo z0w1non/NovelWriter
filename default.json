@@ -1,27 +1,29 @@
 {
   "current_chapter": 0,
+  "novel_prompt": "",
   "outline": {
-    "outline_template": "chapters 配列を作成し、各章に title、summary、elements を含める。章の順序は chapters 配列内の位置で表現し、elements は章に帰属する任意個数の要素を配列で表現する。",
-    "chapter_template": "title、summary、elements を持つ。章番号は配列内の位置から決定する。",
     "max_tokens_instruction": "構成JSONの回答に使用できる最大トークン数は {0} です。この上限を十分に活用し、各章の要素を省略せず、詳細で実用的な全体構成を生成してください。"
   },
-  "outline_writer": {
+  "planner": {
     "user": "",
-    "system_prompt": "outline_writer",
-    "prompt": ""
+    "system_prompt": "planner"
   },
-  "writer": {
+  "author": {
     "user": "",
-    "system_prompt": "writer",
-    "prompt": ""
+    "system_prompt": "author"
   },
-  "proofreader": {
+  "summarizer": {
     "user": "",
-    "system_prompt": "proofreader",
-    "prompt": ""
+    "system_prompt": "summarizer"
+  },
+  "reviewer": {
+    "user": "",
+    "system_prompt": "reviewer"
   },
   "json_retry": {
     "outline": "前回の回答は期待する JSON 構造ではありませんでした。JSON オブジェクトだけを再生成してください。chapters 配列と、各章の title、summary、elements を必ず含めてください。",
-    "writer": "前回の回答は期待する JSON 構造ではありませんでした。JSON オブジェクトだけを再生成してください。body に本文文字列、chapter_complete に true または false の JSON 真偽値を必ず含めてください。"
+    "author": "前回の回答は期待する JSON 構造ではありませんでした。JSON オブジェクトだけを再生成してください。body に本文文字列、chapter_complete に true または false の JSON 真偽値を必ず含めてください。",
+    "summarizer": "前回の回答は期待する JSON 構造ではありませんでした。JSON オブジェクトだけを再生成してください。summary に要約本文を文字列で必ず含めてください。",
+    "rejection": "校閲者から次の理由で棄却されました。要求に従って本文を修正し、直前の本文を反復せずに再生成してください。\n{0}"
   }
 }

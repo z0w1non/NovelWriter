@@ -40,7 +40,7 @@ data/default-user/personas/
 ## 小説設定の作成
 
 ```powershell
-.\Invoke-NovelWriter.ps1 -Create 'テスト'
+.\Invoke-NovelWriter.ps1 -New 'テスト'
 ```
 
 作成された `novel-configs/テスト.json` を編集します。
@@ -48,26 +48,23 @@ data/default-user/personas/
 ```json
 {
   "novel_name": "テスト",
-  "novel": "小説固有の設定",
+  "novel_prompt": "小説固有の設定",
   "character": "Assistant",
   "chapter_count": 5,
   "macros": {
     "user": ""
   },
-  "outline_writer": {
+  "planner": {
     "user": "",
-    "system_prompt": "outline_writer",
-    "prompt": ""
+    "system_prompt": "planner"
   },
-  "writer": {
+  "author": {
     "user": "",
-    "system_prompt": "writer",
-    "prompt": ""
+    "system_prompt": "author"
   },
-  "proofreader": {
+  "reviewer": {
     "user": "",
-    "system_prompt": "proofreader",
-    "prompt": ""
+    "system_prompt": "reviewer"
   }
 }
 ```
@@ -79,26 +76,32 @@ data/default-user/personas/
 最初に全体構成を生成します。
 
 ```powershell
-.\Invoke-NovelWriter.ps1 -Init .\novel-configs\テスト.json
+.\Invoke-NovelWriter.ps1 -Plan .\novel-configs\テスト.json
+```
+
+`novel-configs` 内のJSONはファイル名だけでも指定できます。
+
+```powershell
+.\Invoke-NovelWriter.ps1 -Plan テスト.json
 ```
 
 本文執筆と校正を1回実行します。
 
 ```powershell
-.\Invoke-NovelWriter.ps1 -Continue .\novel-configs\テスト.json
+.\Invoke-NovelWriter.ps1 -Write .\novel-configs\テスト.json
 ```
 
 複数回実行する場合は `-Step` を指定します。
 
 ```powershell
 # 3回実行
-.\Invoke-NovelWriter.ps1 -Continue .\novel-configs\テスト.json -Step 3
+.\Invoke-NovelWriter.ps1 -Write .\novel-configs\テスト.json -Step 3
 
 # 全章が完了するまで実行
-.\Invoke-NovelWriter.ps1 -Continue .\novel-configs\テスト.json -Step -1
+.\Invoke-NovelWriter.ps1 -Write .\novel-configs\テスト.json -Step -1
 ```
 
-校正者が棄却した場合は、その理由を本文執筆者へ渡して再執筆します。棄却時は追記せず、承認された本文だけを成果物へ追記します。
+校閲者が棄却した場合は、その理由を本文作成者へ渡して再執筆します。棄却時は追記せず、承認された本文だけを成果物へ追記します。
 
 ## 出力
 
@@ -109,3 +112,7 @@ outputs/<novel_name>/state.json
 ```
 
 詳細な仕様は [docs/SPECIFICATION.md](docs/SPECIFICATION.md)、開発上のルールは [docs/AGENTS.md](docs/AGENTS.md) を参照してください。
+
+## License
+
+MIT License（[LICENSE](LICENSE)）

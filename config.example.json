@@ -8,5 +8,6 @@
     "context_size": 8192,
     "max_tokens": 1024
   },
-  "json_retry_limit": 3
+  "json_retry_limit": 3,
+  "summary_size": 512
 }
