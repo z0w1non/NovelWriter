@@ -204,7 +204,35 @@ function Read-StCharacter([object]$Config, [string]$Name) {
     throw "PNG キャラクターカード '$Name' に chara データがありません: $path"
 }
 
-function Invoke-KoboldCpp([object]$Config, [string]$Prompt, [hashtable]$MacroValues, [string]$CharacterText, [string]$PersonaText, [string]$SystemText, [string]$InstructionText = '', [int]$ResponseTokenOverride = 0, [string]$ContextText = '', [string]$UserSuffix = '') {
+function Get-ResponseFormat([string]$Role) {
+    $properties = [ordered]@{}
+    $required = @()
+    switch ($Role) {
+        'planner' {
+            $properties.chapters = @{ type = 'array'; items = @{ type = 'object'; properties = [ordered]@{ title = @{ type = 'string' }; summary = @{ type = 'string' }; elements = @{ type = 'array'; items = @{ type = 'string' } } }; required = @('title','summary','elements'); additionalProperties = $false } }
+            $required = @('chapters')
+        }
+        'summarizer' {
+            $properties.summary = @{ type = 'string' }
+            $required = @('summary')
+        }
+        'author' {
+            $properties.body = @{ type = 'string' }
+            $properties.chapter_complete = @{ type = 'boolean' }
+            $required = @('body','chapter_complete')
+        }
+        'reviewer' {
+            $properties.body = @{ type = 'string' }
+            $properties.append = @{ type = 'boolean' }
+            $properties.rejection_reason = @{ type = 'string' }
+            $required = @('body','append','rejection_reason')
+        }
+        default { throw "未知のレスポンス形式です: $Role" }
+    }
+    return @{ type = 'json_schema'; json_schema = @{ name = "${Role}_response"; schema = @{ type = 'object'; properties = $properties; required = $required; additionalProperties = $false } } }
+}
+
+function Invoke-KoboldCpp([object]$Config, [string]$Prompt, [hashtable]$MacroValues, [string]$CharacterText, [string]$PersonaText, [string]$SystemText, [string]$InstructionText = '', [int]$ResponseTokenOverride = 0, [string]$ContextText = '', [string]$UserSuffix = '', [string]$ResponseRole = '') {
     $uri = "$($Config.api_server.TrimEnd('/'))$($Config.generate_path)"
     $systemContent = (@($SystemText, $InstructionText, $PersonaText, $CharacterText) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`r`n`r`n"
     $requestData = $Prompt | ConvertFrom-Json
@@ -214,7 +242,7 @@ function Invoke-KoboldCpp([object]$Config, [string]$Prompt, [hashtable]$MacroVal
     if (-not [string]::IsNullOrWhiteSpace($systemContent)) { $messages += @{ role = 'system'; content = (Expand-Macros $systemContent $MacroValues) } }
     if (-not [string]::IsNullOrWhiteSpace($ContextText)) { $messages += @{ role = 'assistant'; content = (Expand-Macros $ContextText $MacroValues) } }
     $messages += @{ role = 'user'; content = (Expand-Macros $userContent $MacroValues) }
-    $bodyObject = @{ messages = $messages; stream = $false }
+    $bodyObject = @{ messages = $messages; stream = $false; response_format = (Get-ResponseFormat $ResponseRole) }
     if ($null -ne $Config.override) {
         foreach ($property in $Config.override.PSObject.Properties) {
             $bodyObject[$property.Name] = $property.Value
@@ -361,7 +389,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Plan') {
     while ($true) {
         try {
             Write-Host 'Run: Planner' -ForegroundColor Yellow
-            $outlineResponse = Invoke-KoboldCpp $config $outlinePromptText $macroValues $characterText $roleResources.planner.persona $outlineSystemText $outlineInstructionText $outlineMaxTokens
+            $outlineResponse = Invoke-KoboldCpp $config $outlinePromptText $macroValues $characterText $roleResources.planner.persona $outlineSystemText $outlineInstructionText $outlineMaxTokens '' '' 'planner'
             $outline = Convert-OutlineResponse $outlineResponse
             if ($null -eq $outline.chapters -or $outline.chapters.Count -eq 0) { throw '構成 JSON に chapters がありません。' }
             if ($outline.chapters.Count -ne [int]$novelConfig.chapter_count) { throw "構成 JSON の chapters 数が指定値と一致しません。指定: $($novelConfig.chapter_count)、実際: $($outline.chapters.Count)" }
@@ -420,7 +448,7 @@ if (-not [string]::IsNullOrWhiteSpace($existing)) {
     while ($true) {
         try {
             Write-Host 'Run: Summarize' -ForegroundColor Yellow
-            $summaryResponse = Invoke-KoboldCpp $config $summaryPrompt $macroValues $characterText $roleResources.summarizer.persona $roleResources.summarizer.system '' ([int]$config.summary_size) $existing
+            $summaryResponse = Invoke-KoboldCpp $config $summaryPrompt $macroValues $characterText $roleResources.summarizer.persona $roleResources.summarizer.system '' ([int]$config.summary_size) $existing '' 'summarizer'
             $summaryJson = Convert-ModelJson $summaryResponse
             if ($null -eq $summaryJson.PSObject.Properties['summary'] -or [string]::IsNullOrWhiteSpace([string]$summaryJson.summary)) { throw '要約作成者の JSON に summary がありません。' }
             $contextSummary = [string]$summaryJson.summary
@@ -480,7 +508,7 @@ while ($true) {
         }
         $includeRejectionFeedback = $false
         Write-Host 'Run: Author' -ForegroundColor Yellow
-        $draftResponse = Invoke-KoboldCpp $config $writerPromptForAttempt $macroValues $characterText $roleResources.author.persona $roleResources.author.system '' 0 $context $writerUserSuffix
+        $draftResponse = Invoke-KoboldCpp $config $writerPromptForAttempt $macroValues $characterText $roleResources.author.persona $roleResources.author.system '' 0 $context $writerUserSuffix 'author'
         $draftJson = Convert-ModelJson $draftResponse
     if ($null -eq $draftJson.PSObject.Properties['body'] -or [string]::IsNullOrWhiteSpace([string]$draftJson.body)) { throw '本文作成者の JSON に body がありません。' }
     if ($null -eq $draftJson.PSObject.Properties['chapter_complete'] -or $draftJson.chapter_complete -isnot [bool]) { throw '本文作成者の JSON に bool 型の chapter_complete がありません。' }
@@ -493,7 +521,7 @@ while ($true) {
         } | ConvertTo-Json -Depth 20 | ForEach-Object { Format-JsonText $_ })
         Write-Host 'Run: Reviewer' -ForegroundColor Yellow
         $reviewerUserSuffix = if (-not [string]::IsNullOrWhiteSpace($contextSummary)) { "## 過去本文の要約`r`n`r`n$contextSummary" } else { '' }
-        $proofResponse = Invoke-KoboldCpp $config $proofPrompt $macroValues $characterText $roleResources.reviewer.persona $roleResources.reviewer.system '' 0 $draft $reviewerUserSuffix
+        $proofResponse = Invoke-KoboldCpp $config $proofPrompt $macroValues $characterText $roleResources.reviewer.persona $roleResources.reviewer.system '' 0 $draft $reviewerUserSuffix 'reviewer'
         $proofJson = Convert-ModelJson $proofResponse
         if ($null -eq $proofJson.PSObject.Properties['body']) { throw '校閲者の JSON に body がありません。' }
         if ($null -eq $proofJson.PSObject.Properties['append'] -or $proofJson.append -isnot [bool]) { throw '校閲者の JSON に bool 型の append がありません。' }

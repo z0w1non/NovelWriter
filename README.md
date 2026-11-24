@@ -1,6 +1,6 @@
 # NovelWriter
 
-SillyTavern のローカルデータを参照し、KoboldCpp の Chat API で小説を段階的に執筆する PowerShell ツールです。
+SillyTavern のローカル資源を参照し、KoboldCpp の Chat API で小説を段階的に作成・校閲する PowerShell ツールです。
 
 ## 前提
 
@@ -8,7 +8,7 @@ SillyTavern のローカルデータを参照し、KoboldCpp の Chat API で小
 - KoboldCpp が起動していること
 - SillyTavern のデータが利用できること
 
-`config.example.json` を `config.json` にコピーし、`config.json` に KoboldCpp と SillyTavern の場所を設定します。`config.json` は開発者固有の設定を含むためGit管理対象外です。
+`config.example.json` を `config.json` にコピーし、KoboldCpp と SillyTavern の場所を設定します。
 
 ```json
 {
@@ -21,13 +21,16 @@ SillyTavern のローカルデータを参照し、KoboldCpp の Chat API で小
     "context_size": 8192,
     "max_tokens": 1024
   },
-  "json_retry_limit": 3
+  "json_retry_limit": 3,
+  "summary_size": 512
 }
 ```
 
-## システムプロンプト
+`summary_size` は過去本文の要約目標トークン数です。`override` の属性は KoboldCpp に転送されます。`seed` は未指定時に自動設定されません。
 
-プロジェクトの `data/<user>/` が最優先で参照され、存在しない場合だけ SillyTavern の同じ場所が参照されます。
+## ロールと資源
+
+ロール名は `planner`、`author`、`reviewer`、`summarizer` です。
 
 ```text
 data/default-user/sysprompt/
@@ -35,7 +38,7 @@ data/default-user/characters/
 data/default-user/personas/
 ```
 
-システムプロンプトは `sysprompt`、キャラクターは JSON または PNG カード、ペルソナは JSON を使用します。
+プロジェクト内の `data/<user>/` が優先され、ない場合だけ SillyTavern 側の同じ資源を参照します。sysprompt は Markdown 入力を指示し、出力形式を示す JSON 例を含みます。
 
 ## 小説設定の作成
 
@@ -65,33 +68,29 @@ data/default-user/personas/
   "reviewer": {
     "user": "",
     "system_prompt": "reviewer"
+  },
+  "summarizer": {
+    "user": "",
+    "system_prompt": "summarizer"
   }
 }
 ```
 
-`{{char}}` には `character` の値が自動的に設定されます。
+`{{char}}` には `character` の値が自動設定されます。
 
 ## 実行
 
-最初に全体構成を生成します。
+全体構成を生成します。
 
 ```powershell
 .\Invoke-NovelWriter.ps1 -Plan .\novel-configs\テスト.json
 ```
 
-`novel-configs` 内のJSONはファイル名だけでも指定できます。
-
-```powershell
-.\Invoke-NovelWriter.ps1 -Plan テスト.json
-```
-
-本文執筆と校正を1回実行します。
+本文作成・校閲を1回実行します。
 
 ```powershell
 .\Invoke-NovelWriter.ps1 -Write .\novel-configs\テスト.json
 ```
-
-複数回実行する場合は `-Step` を指定します。
 
 ```powershell
 # 3回実行
@@ -101,7 +100,22 @@ data/default-user/personas/
 .\Invoke-NovelWriter.ps1 -Write .\novel-configs\テスト.json -Step -1
 ```
 
-校閲者が棄却した場合は、その理由を本文作成者へ渡して再執筆します。棄却時は追記せず、承認された本文だけを成果物へ追記します。
+旧 CLI 名は使用しません。`state.json` がない場合、`-Write` 時に初期状態で作成されます。`state.json` と本文 `.txt` を削除して再実行すると、先頭章から再試行できます。
+
+## プロンプトと出力
+
+入力プロンプトは日本語 Markdown で構築します。本文作成時は、system、過去本文全量の assistant、Markdown の user 指示、過去本文要約の順に送信します。各 API リクエストにはロールごとの `json_schema` を指定し、回答は JSON として検証・再試行します。
+
+主な出力形式は以下です。
+
+```json
+{
+  "body": "本文",
+  "chapter_complete": false
+}
+```
+
+ログは `Run:`、`Input:`、`Output:`、`Result:` の形式で表示されます。
 
 ## 出力
 

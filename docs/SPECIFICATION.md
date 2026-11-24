@@ -24,7 +24,7 @@
 
 ## プロンプト形式
 
-入力プロンプトは JSON を埋め込まず、日本語 Markdown の見出しと箇条書きで構築する。見出しの前には空行を置く。出力形式を示す JSON 例だけは sysprompt に残す。
+入力プロンプトは JSON を埋め込まず、日本語 Markdown の見出しと箇条書きで構築する。見出しの前には空行を置く。sysprompt などプロンプト上で決め打ちする見出し、および見出しに類似する固定ラベルは全て `#` 形式の Markdown 見出しにする。`名前:`、`description:` のようなコロン区切りの固定ラベルは使用しない。出力形式を示す JSON 例だけは sysprompt に残す。
 
 本文作成時の messages は、system、過去本文全量を持つ assistant、Markdown の user 指示、user 指示末尾の過去本文要約の順とする。校閲時は system、作成本文を持つ assistant、Markdown の user 指示、過去本文要約の順とする。
 
@@ -53,3 +53,68 @@ planner、author、reviewer、summarizer の回答は JSON を要求し、`Conve
 ```text
 Result: chapter=1; approved=true; appended=true; chapter_completed=true
 ```
+
+## 生成 JSON Schema
+
+各ロールの Chat Completions リクエストには `response_format.type=json_schema` を指定する。`additionalProperties=false` とし、指定外のトップレベルキーおよび章オブジェクトのキーを許可しない。
+
+### planner
+
+```json
+{
+  "chapters": [
+    {
+      "title": "章タイトル",
+      "summary": "章概要",
+      "elements": ["短い要素"]
+    }
+  ]
+}
+```
+
+`chapters` は必須配列で、各章の `title` と `summary` は文字列、`elements` は文字列配列とする。
+
+### summarizer
+
+```json
+{
+  "summary": "過去本文の要約"
+}
+```
+
+`summary` は必須文字列とする。
+
+### author
+
+```json
+{
+  "body": "生成された本文",
+  "chapter_complete": false
+}
+```
+
+`body` は必須文字列、`chapter_complete` は必須の JSON 真偽値とする。
+
+### reviewer
+
+承認時：
+
+```json
+{
+  "body": "校閲後の本文",
+  "append": true,
+  "rejection_reason": ""
+}
+```
+
+棄却時：
+
+```json
+{
+  "body": "",
+  "append": false,
+  "rejection_reason": "問題と本文作成者への要求"
+}
+```
+
+`body`、`append`、`rejection_reason` は全て必須とする。`append=false` の場合に `rejection_reason` を空にしないこと、および承認・棄却時の値の関係は PowerShell 側で検証する。
